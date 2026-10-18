@@ -1,7 +1,7 @@
 # Kosh AI — The Storage Assistant That Explains Before It Deletes
 
 > **Working name:** *Kosh* (कोश, "storehouse / treasury"). Other name ideas are in [Section 25](#25-name-ideas).
-> **Document type:** Full startup blueprint: product, technology, business, go-to-market, roadmap, and YC application.
+> **Document type:** Full startup blueprint: product, technology, business, go-to-market, roadmap, and YC application
 > **Version:** 1.0 · October 2026 · Prepared for: Shaan (Fastliq)
 
 ---
