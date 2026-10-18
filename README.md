@@ -1,622 +1,509 @@
-# Kosh AI — The Storage Assistant That Explains Before It Deletes
+# Kosh Doctor — Build Specification
 
-> **Working name:** *Kosh* (कोश, "storehouse / treasury"). Other name ideas are in [Section 25](#25-name-ideas).
-> **Document type:** Full startup blueprint: product, technology, business, go-to-market, roadmap, and YC application
-> **Version:** 1.0 · October 2026 · Prepared for: Shaan (Fastliq)
-
----
-
-## Table of Contents
-
-1. [One-Line Pitch & TL;DR](#1-one-line-pitch--tldr)
-2. [The Problem](#2-the-problem)
-3. [Why Now](#3-why-now)
-4. [The Solution & Product Principles](#4-the-solution--product-principles)
-5. [Who It Is For (Personas)](#5-who-it-is-for-personas)
-6. [Full Feature List](#6-full-feature-list)
-7. [User Journeys & Example Conversations](#7-user-journeys--example-conversations)
-8. [System Architecture](#8-system-architecture)
-9. [Technology Stack (and Why)](#9-technology-stack-and-why)
-10. [How the AI Works](#10-how-the-ai-works)
-11. [Safety System: "Never Delete the Wrong Thing"](#11-safety-system-never-delete-the-wrong-thing)
-12. [Privacy & Product Security](#12-privacy--product-security)
-13. [Security Scanner (Vulnerability Detection)](#13-security-scanner-vulnerability-detection)
-14. [Competition](#14-competition)
-15. [The Moat](#15-the-moat)
-16. [Business Model & Pricing](#16-business-model--pricing)
-17. [Unit Economics](#17-unit-economics)
-18. [Market Size](#18-market-size)
-19. [Go-To-Market & Growth Loops](#19-go-to-market--growth-loops)
-20. [Roadmap](#20-roadmap)
-21. [Team & Hiring](#21-team--hiring)
-22. [Resources: Learning, Tools, Data, Budget](#22-resources-learning-tools-data-budget)
-23. [Metrics That Matter](#23-metrics-that-matter)
-24. [Risks & How We Handle Them](#24-risks--how-we-handle-them)
-25. [Name Ideas](#25-name-ideas)
-26. [Y Combinator Application Angle](#26-y-combinator-application-angle)
-27. [Your First 30 Days: Action Checklist](#27-your-first-30-days-action-checklist)
-28. [Appendix: Schemas, Code Skeletons, Protected Paths](#28-appendix-schemas-code-skeletons-protected-paths)
+> **Read this whole file before writing any code.**
+> This README is written for an AI coding agent (Claude Code) and for the human owner.
+> It defines *what* to build, *how* to build it, *in what order*, and *how to prove each step works*.
+> The owner is not a programmer. Explain what you are doing in plain language, and ask the owner whenever a step needs something only a human can provide (accounts, hardware, keys, decisions).
 
 ---
 
-## 1. One-Line Pitch & TL;DR
+## 0. Rules for the coding agent
 
-**One line:**
-> Kosh is an AI assistant for your computer's storage. Ask it anything: *"What is this folder? Where is it saved? What breaks if I delete it?"* It finds the space you can safely free and never deletes anything without your permission.
+1. **Build one milestone at a time** (Section 16). Do not start the next milestone until every acceptance check of the current one passes.
+2. **Run the tests after every change**: `cargo fmt --all`, `cargo clippy --all-targets -- -D warnings`, `cargo test --all`. Fix failures before moving on.
+3. **Never invent system facts.** Before relying on any Windows registry path, WMI class, event ID or command output format, verify it on the owner's real machine (ask the owner to run a PowerShell command and paste the output, or run it yourself if you have shell access). Record verified facts in `docs/VERIFIED_SOURCES.md` with the date and Windows version.
+4. **Version 1 is read-only.** No code path may delete, modify, disable, install or uninstall anything on the user's machine. The only allowed "actions" are: opening a Windows Settings page, opening a folder in Explorer, opening a URL in the browser, and copying a command to the clipboard for the user to run themselves.
+5. **Detection is deterministic; AI only explains.** Every finding must be produced by a rule in `kosh-rules` from collected evidence. The AI layer may rephrase, translate and prioritize findings. It may never add a finding, a number, a path or a version that is not in the input.
+6. **Privacy by default.** Never read file contents (except the explicitly listed config sources). Never upload anything without the user's opt-in. Strip usernames and personal names from anything sent off the device.
+7. **Commit after each milestone** with a clear message, and update `CHANGELOG.md`.
+8. **When stuck, stop and ask.** Write what you tried, what failed, and the exact error. Do not silently lower a requirement.
+9. **Keep it understandable.** Every crate gets a short `README.md` describing what it does. Prefer simple code over clever code.
 
-**TL;DR**
+---
 
-| | |
+## 1. What we are building
+
+**Kosh Doctor** is a device health assistant. It scans a computer, finds what is broken, slow, risky or failing, and produces a clear report that tells the user:
+
+- what is wrong, with the evidence,
+- how serious it is,
+- whether they can fix it themselves, Kosh can help, or they need a technician,
+- step-by-step instructions to fix it,
+- how to confirm the fix worked.
+
+It runs two ways from one engine:
+
+- **CLI:** `kosh scan`, `kosh report`, `kosh doctor <topic>` (built first).
+- **Desktop app:** a Tauri app with a "Scan my PC" button, the report, and a chat panel (built after the CLI is solid).
+
+### 1.1 Non-goals for version 1
+
+- Not an antivirus. It never claims to remove malware. It complements Microsoft Defender.
+- No automatic fixes, no driver downloads, no "registry cleaning", no "speed boosters".
+- No file deletion or storage cleanup (that is a separate Kosh module, planned later).
+- No ads, no scare tactics, no fake problem counts. If everything is fine, say so.
+
+---
+
+## 2. Product principles
+
+| Principle | What it means in code |
 |---|---|
-| **Problem** | Devices fill up. People don't know what is safe to delete. They either delete important things by mistake, or they waste money on pen drives, hard disks, and cloud plans. |
-| **Insight** | Existing cleaners show *what is big*. Nobody explains *what it is, who uses it, and what happens if it's gone*. That explanation is the missing piece, and AI can now provide it. |
-| **Product** | A desktop app (Windows first) with a fast scanner, a chat assistant, a traffic-light safety system, impact analysis, permission-gated deletion with 30-day undo, and a security check. |
-| **Moat** | A growing **"Folder Knowledge Graph"**: a database that knows which app owns which folder and what is safe to remove. It gets smarter with every user. |
-| **Business** | Freemium. Free scan + basic cleaning; Pro ~$3–5/month (India: ~₹99–149/month); Teams/IT edition per device; OEM preinstall deals later. |
-| **Wedge** | Students, developers, and budget-laptop owners (256–512 GB SSDs) in India and other emerging markets, then global. |
-| **Promise** | *No scareware. No ads. No fake "247 problems found!" alerts.* A trustworthy brand in a category known for distrust. |
+| Evidence first | Every finding carries a list of evidence items (source, raw value, timestamp). |
+| Calm and honest | Severity is computed by rules, never inflated. "All good" is a valid report. |
+| Who can fix it | Every finding has a `fix_level`: `self`, `guided_action`, or `technician`. |
+| Verifiable | Every finding has a `verify` section: how a re-scan confirms the problem is gone. |
+| Precision over recall | It is better to miss a minor issue than to report a false one. When unsure, mark `confidence: low` and phrase it as "possible". |
+| Works offline | The full report works without internet and without AI. AI and online vulnerability data are enhancements. |
+| Least privilege | Runs as a normal user. Some checks need Administrator; they are skipped (and listed as "skipped, needs admin") when not elevated. |
 
 ---
 
-## 2. The Problem
+## 3. Platform scope
 
-### 2.1 What happens today
-
-1. A warning pops up: **"Low disk space."**
-2. The user opens File Explorer. They see `C:\` is almost full, with folders like `AppData`, `ProgramData`, `WinSxS`, `$Recycle.Bin`, and `node_modules`. They have no idea what any of these are.
-3. They do one of three bad things:
-   - **Delete randomly.** They remove a folder that "looks useless". A game stops working, an app loses its settings, or college project files disappear.
-   - **Do nothing.** The laptop gets slow, updates fail (Windows updates need free space), and photos can't be saved.
-   - **Spend money.** They buy a pen drive, an external hard disk, or a cloud plan, often when 30–80 GB could have been freed safely.
-
-### 2.2 Why existing tools don't solve it
-
-| Tool type | What it does | What's missing |
+| Tier | Platform | Version 1 status |
 |---|---|---|
-| Windows Storage Sense / Disk Cleanup | Removes temp files and the recycle bin | Very limited. Doesn't explain, doesn't touch most of the real space. |
-| Disk visualizers (WinDirStat, WizTree, TreeSize) | Show *where* the big folders are | No meaning. "`C:\Users\you\AppData\Local\Packages\…` is 14 GB." So what? Is it safe? |
-| "Cleaners" (CCleaner etc.) | One-click junk cleaning, registry tools | Black box. The category has a reputation for scare tactics and aggressive upsells. |
-| Phone "AI cleaners" | Duplicate photos | Phone-only, mostly photos, often ad-heavy. |
-| Asking ChatGPT/Google | General advice | Can't see *your* machine. Generic answers like "it depends". |
+| 1 | Windows 10 and 11, x64 | Full support. All milestones target this first. |
+| 2 | macOS 13+ (Apple Silicon and Intel) | Collector adapter in Milestone 9. |
+| 2 | Linux (Ubuntu/Debian/Fedora) | Collector adapter in Milestone 10. |
+| 3 | Android | Not in this repo. A future companion app with limited data (battery, storage, app list). |
+| — | iOS / iPadOS | Not possible. Apple does not allow apps to inspect the system. Do not attempt. |
 
-### 2.3 The real, deeper problem
-
-> **People don't have a storage problem. They have an *understanding* problem.**
-
-The space is usually there. Users just can't tell **junk** apart from **important** files. Kosh fixes the understanding, and freed space follows from that.
-
-### 2.4 Pain stories (use these in your pitch)
-
-- **Riya, 2nd-year engineering student:** 256 GB laptop. Android Studio + emulator images + three old projects with `node_modules` = 60+ GB. She deleted her `Documents` folder thinking it was "system stuff" and lost assignments.
-- **Arjun, gamer:** Bought a ₹5,000 external SSD. 40 GB of old game shader caches, leftover installers, and duplicate downloads were sitting on his drive.
-- **Mrs. Sharma, parent:** The family laptop is "full". WhatsApp Desktop media is 18 GB, and photos are backed up twice. She doesn't know what any folder means and is scared to touch anything.
-- **Small office (10 PCs):** The IT person spends hours each month freeing space manually and has no visibility across machines.
+The architecture must keep platform-specific code inside `kosh-collectors/src/<platform>/` so new platforms do not touch the rules, report or AI layers.
 
 ---
 
-## 3. Why Now
-
-1. **AI can finally explain.** Large language models can turn a cryptic path into plain language ("This is Chrome's cache. It rebuilds itself. Safe to clear.") and answer follow-up questions in any language, including Hindi, Tamil, and Hinglish.
-2. **AI can run on the device.** Small open models (Qwen, Llama, Gemma, Phi families) now run on normal laptops through llama.cpp / Ollama / ONNX Runtime, and new "AI PCs" ship with NPUs. That means a private, offline, near-zero-cost AI for the free tier.
-3. **Storage per rupee isn't keeping up with storage needs.** Budget laptops still ship with 256–512 GB SSDs, while apps, games (often 100 GB+), 4K phone videos, and dev tools keep growing.
-4. **People are getting used to AI agents acting for them.** Users now expect an assistant that *does things*, but they also want control and an undo button. A "permission-first agent" is the right product shape for this moment.
-5. **Trust gap in the category.** Old cleaner brands carry baggage (scareware perception, privacy incidents, a 2017 supply-chain attack on a popular cleaner). A new, transparent, privacy-first brand can win.
-
----
-
-## 4. The Solution & Product Principles
-
-### 4.1 What Kosh is
-
-A desktop app with four layers:
+## 4. Architecture
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│  1. SEE      Fast scan + visual storage map              │
-│  2. UNDERSTAND  AI explains every folder; ask anything   │
-│  3. DECIDE   Traffic-light safety + "what breaks" check  │
-│  4. ACT      Permission-gated cleanup with 30-day undo   │
-└──────────────────────────────────────────────────────────┘
+┌──────────────┐   ┌────────────────┐   ┌───────────────┐   ┌──────────────┐   ┌─────────────┐
+│  Collectors  │──▶│   Snapshot     │──▶│  Rules engine │──▶│   Findings   │──▶│   Report    │
+│ (per platform)│  │ (one JSON doc) │   │ (deterministic)│  │ (with fixes) │   │ terminal/   │
+└──────────────┘   └────────────────┘   └───────────────┘   └──────┬───────┘   │ JSON/HTML   │
+                                               ▲                   │           └─────────────┘
+                                   ┌───────────┴─────────┐   ┌─────▼────────┐
+                                   │ Vulnerability DB     │   │  AI narrator │ (optional, explains only)
+                                   │ (local SQLite cache) │   └──────────────┘
+                                   └─────────────────────┘
 ```
 
-### 4.2 The seven product principles (non-negotiable)
+**Key idea:** a scan produces a **Snapshot** (pure facts). The rules engine turns a Snapshot into **Findings**. Because Snapshots are plain JSON, they can be saved, shared (anonymized) and replayed in tests without the original computer.
 
-1. **Permission first.** The AI *proposes*. The user *approves*. Nothing is ever deleted automatically unless the user created an explicit rule for it.
-2. **Always explainable.** Every suggestion shows *why*: owner app, size, last used, how to get it back, and a confidence level.
-3. **Always undoable.** Every action is logged and reversible (quarantine / Recycle Bin / restore point) for at least 30 days.
-4. **Show evidence, not fear.** No "1,247 problems found!" No red alarm screens. Just facts: "You can safely free 38 GB."
-5. **Local first, private by default.** File *contents* are never uploaded. Metadata is minimized and anonymized before any cloud call.
-6. **System files are locked.** Core OS folders are untouchable from the app, even if the user or the AI asks.
-7. **Honest business.** No ads, no selling data, no fake urgency. Revenue comes only from people who find it valuable.
+### 4.1 Repository layout
+
+```
+kosh-doctor/
+├── README.md                  ← this file
+├── CHANGELOG.md
+├── Cargo.toml                 ← Rust workspace
+├── crates/
+│   ├── kosh-core/             ← shared types: Snapshot, Finding, Evidence, Severity
+│   ├── kosh-collectors/       ← gathers facts
+│   │   └── src/{windows,macos,linux}/
+│   ├── kosh-rules/            ← detection rules → Findings
+│   ├── kosh-vuln/             ← software inventory → known vulnerabilities
+│   ├── kosh-report/           ← terminal, JSON and HTML output; health score
+│   ├── kosh-ai/               ← optional AI narration and chat (explains findings only)
+│   └── kosh-cli/              ← the `kosh` command
+├── app/                       ← Tauri 2 + React + TypeScript desktop app (Milestone 8)
+├── rules/                     ← rule metadata in TOML (titles, fix steps, verify steps, languages)
+├── data/
+│   └── os_lifecycle.toml      ← OS versions and their support end dates
+├── tests/
+│   ├── fixtures/              ← saved anonymized Snapshots with expected findings
+│   └── lab/                   ← fault-injection lab scripts and expected results
+└── docs/
+    ├── VERIFIED_SOURCES.md    ← every system fact verified on a real machine
+    ├── CHECK_CATALOG.md       ← generated list of all checks
+    └── PRIVACY.md
+```
+
+### 4.2 Technology choices
+
+| Need | Choice | Notes |
+|---|---|---|
+| Language | Rust (stable, 2021 edition or newer) | Safe and fast; good Windows support. |
+| Windows APIs | `windows` crate (windows-rs), `wmi` crate, `winreg` crate | Prefer native APIs. PowerShell fallback is allowed only where noted, and must be marked in code with `// FALLBACK_POWERSHELL`. |
+| Cross-platform process/memory | `sysinfo` crate | |
+| CLI | `clap` (derive) | |
+| Serialization | `serde`, `serde_json`, `toml` | |
+| Local DB | `rusqlite` (bundled) | Vulnerability cache, scan history. |
+| HTTP | `reqwest` (rustls) | Only for vulnerability feeds and optional AI. |
+| HTML report | `minijinja` templates, single self-contained HTML file | No external assets. |
+| Tests | built-in tests + `insta` snapshot tests | |
+| Desktop app | Tauri 2, React, TypeScript, Tailwind | Milestone 8. |
+| Optional deep data | `smartctl` (smartmontools), osquery | Detect if installed; never required. |
 
 ---
 
-## 5. Who It Is For (Personas)
+## 5. Data model
 
-| Persona | Device | Main pain | What they need from Kosh | Will they pay? |
+Define these in `kosh-core`. Everything else depends on them.
+
+```rust
+pub struct Snapshot {
+    pub schema_version: u32,          // start at 1
+    pub scan_id: String,              // UUID
+    pub taken_at: DateTime<Utc>,
+    pub elevated: bool,               // was the scan run as Administrator?
+    pub platform: PlatformInfo,       // OS name, version, build, edition, architecture
+    pub hardware: HardwareInfo,       // CPU, RAM sticks/slots, disks, battery, GPU
+    pub performance: PerformanceInfo, // memory/CPU/disk usage, top processes
+    pub storage: StorageInfo,         // volumes, free space
+    pub devices: Vec<DeviceInfo>,     // PnP devices and problem codes, drivers
+    pub events: EventSummary,         // counted and sampled log events (last 30 days)
+    pub security: SecurityInfo,       // AV, firewall, updates, BitLocker, Secure Boot, TPM, SMBv1...
+    pub software: Vec<InstalledApp>,  // name, publisher, version, install date, source
+    pub startup: Vec<StartupItem>,    // Run keys, startup folders, tasks, auto services
+    pub network: NetworkInfo,         // adapters, status, basic connectivity
+    pub skipped: Vec<SkippedCheck>,   // collector + reason (e.g. "needs admin", "not supported")
+    pub errors: Vec<CollectorError>,  // collectors that failed, with message
+}
+
+pub struct Finding {
+    pub id: String,                   // stable rule id, e.g. "DEV-001"
+    pub category: Category,           // Performance | Device | Stability | Security | Vulnerability | Hardware | Storage | Network
+    pub severity: Severity,           // Critical | High | Medium | Low | Info
+    pub confidence: Confidence,       // High | Medium | Low
+    pub title: String,                // short, plain language
+    pub summary: String,              // 1–2 sentences, plain language
+    pub evidence: Vec<Evidence>,      // source + raw value + timestamp
+    pub fix_level: FixLevel,          // SelfFix | GuidedAction | Technician
+    pub fix_steps: Vec<String>,       // numbered plain-language steps
+    pub actions: Vec<SafeAction>,     // only: OpenSettings(uri) | OpenFolder(path) | OpenUrl(url) | CopyCommand(cmd)
+    pub verify: String,               // how a re-scan confirms it's fixed
+    pub references: Vec<String>,      // official docs URLs (Microsoft, NVD, vendor)
+}
+
+pub struct Evidence {
+    pub source: String,               // e.g. "WMI Win32_PnPEntity", "EventLog System 1001"
+    pub key: String,                  // e.g. "ConfigManagerErrorCode"
+    pub value: String,                // raw value as collected
+    pub observed_at: Option<DateTime<Utc>>,
+}
+```
+
+**Rule:** `SafeAction` is a closed enum. Adding a variant that changes the system is forbidden in version 1.
+
+---
+
+## 6. Collectors (Windows, Tier 1)
+
+Each collector is a function `fn collect(ctx: &Ctx) -> Result<Part, CollectorError>`. A failing collector must never stop the scan; it records an error and the scan continues. Each collector has a timeout (default 15 s).
+
+Verify every source below on a real machine before relying on it (Rule 3).
+
+| Area | What to collect | Primary source | Notes |
+|---|---|---|---|
+| OS | Name, version, build, edition, install date, last boot, uptime | WMI `Win32_OperatingSystem`, registry `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion` (`DisplayVersion`, `CurrentBuild`, `UBR`) | Compare against `data/os_lifecycle.toml`. |
+| System | Manufacturer, model, BIOS version/date | `Win32_ComputerSystem`, `Win32_BIOS` | |
+| CPU | Model, cores, threads, current load | `Win32_Processor`, `sysinfo` | |
+| RAM | Total, available, committed, each stick (size, speed, type), slot count, max supported | `sysinfo`, `Win32_PhysicalMemory`, `Win32_PhysicalMemoryArray` (`MemoryDevices`, `MaxCapacity`) | `MaxCapacity` is often wrong and soldered RAM is invisible. Always mark upgrade advice as "confirm with your laptop's manual". |
+| Memory pressure | Available MB, pages/sec, commit % sampled for N seconds | Performance counters (PDH): `\Memory\Available MBytes`, `\Memory\Pages/sec`, `\Memory\% Committed Bytes In Use` | Default sample: 30 s at 1 s intervals. `kosh monitor` extends this (Milestone 7). |
+| Processes | Top 15 by memory and by CPU, grouped by app name | `sysinfo` | Group child processes (e.g. many `chrome.exe`) under one app. |
+| Disks | Model, media type (SSD/HDD), bus type, size, health status, wear, temperature, read errors | `root\Microsoft\Windows\Storage` → `MSFT_PhysicalDisk` (`MediaType`, `BusType`, `HealthStatus`), `MSFT_StorageReliabilityCounter` (needs admin) | If `smartctl` is installed, also run `smartctl -a -j` and store raw attributes. |
+| Volumes | Drive letters, total, free, file system, BitLocker state | `Win32_LogicalDisk`, `Win32_EncryptableVolume` (`root\CIMV2\Security\MicrosoftVolumeEncryption`, needs admin) | |
+| Battery | Design capacity, full charge capacity, cycle count if available | `root\wmi` → `BatteryStaticData.DesignedCapacity`, `BatteryFullChargedCapacity.FullChargedCapacity`, `BatteryCycleCount` | Desktops have no battery: record "not present", not an error. |
+| GPU | Name, driver version, driver date | `Win32_VideoController` | |
+| Devices | Every PnP device with status and problem code | `Win32_PnPEntity` (`ConfigManagerErrorCode`, `Status`, `PNPClass`, `Name`) | Map problem codes to plain language in `rules/device_codes.toml` (e.g. 10, 22, 28, 31, 43, 45). |
+| Drivers | Name, version, date, provider, signed | `Win32_PnPSignedDriver` | |
+| Event logs (last 30 days) | Counts + up to 5 samples per event type | Windows Event Log API (`EvtQuery`); fallback `Get-WinEvent` | See Section 6.1. |
+| Reliability | Stability index and records | `Win32_ReliabilityStabilityMetrics`, `Win32_ReliabilityRecords` | May be unavailable; record as skipped. |
+| Crash dumps | Count and dates of files in `C:\Windows\Minidump` | File listing only | Do not parse dumps in v1. Bugcheck codes come from event 1001. |
+| Pending reboot | Pending flags | Registry: `...\Component Based Servicing\RebootPending`, `...\WindowsUpdate\Auto Update\RebootRequired`, `Session Manager\PendingFileRenameOperations` | |
+| Updates | Installed hotfixes and dates, last successful update | `Win32_QuickFixEngineering`; Windows Update Agent API (`Microsoft.Update.Session`) via COM | |
+| Antivirus | Products registered, enabled, up to date | `root\SecurityCenter2` → `AntiVirusProduct` (client Windows only); Defender: `root\Microsoft\Windows\Defender` → `MSFT_MpComputerStatus` | |
+| Firewall | Profile states | `root\StandardCimv2` → `MSFT_NetFirewallProfile` | |
+| Secure Boot / TPM | Enabled, version | Registry `HKLM\SYSTEM\CurrentControlSet\Control\SecureBoot\State\UEFISecureBootEnabled`; `Win32_Tpm` (`root\CIMV2\Security\MicrosoftTpm`, needs admin) | |
+| Risky settings | SMBv1 enabled, RDP enabled, UAC disabled, guest account enabled | Optional feature `SMB1Protocol` state, registry `fDenyTSConnections`, `EnableLUA` | |
+| Installed software | Name, version, publisher, install date, install location | Registry Uninstall keys: `HKLM\...\Uninstall`, `HKLM\SOFTWARE\WOW6432Node\...\Uninstall`, `HKCU\...\Uninstall`; AppX packages | Skip entries with `SystemComponent=1` or no `DisplayName`. |
+| Startup | Name, command, location, publisher, signed, enabled | `HKLM`/`HKCU` `...\CurrentVersion\Run` and `RunOnce`; Startup folders; `StartupApproved` keys (to know if disabled); scheduled tasks with logon/boot triggers; auto-start non-Microsoft services | Check signature with `WinVerifyTrust`. |
+| Network | Adapters, status, link speed, IP config present, DNS reachable, internet reachable | `MSFT_NetAdapter`, simple DNS lookup + HTTPS HEAD to a well-known host | Connectivity test is skipped in `--offline` mode. |
+
+### 6.1 Event log queries
+
+Collect counts and up to 5 most recent samples (time, provider, ID, short message) for:
+
+| Meaning | Log | Provider | Event ID(s) |
+|---|---|---|---|
+| Unexpected shutdown / power loss | System | Microsoft-Windows-Kernel-Power | 41 |
+| Previous shutdown was unexpected | System | EventLog | 6008 |
+| Blue screen (bugcheck) | System | BugCheck / Microsoft-Windows-WER-SystemErrorReporting | 1001 |
+| Hardware error | System | Microsoft-Windows-WHEA-Logger | 17, 18, 19, 47 |
+| Disk bad block / I/O retries | System | disk | 7, 153 |
+| File system corruption | System | Ntfs | 55 |
+| Service failed to start / crashed | System | Service Control Manager | 7000, 7001, 7023, 7031, 7034 |
+| App crash / hang | Application | Application Error / Application Hang | 1000, 1002 |
+| Low memory (resource exhaustion) | System | Microsoft-Windows-Resource-Exhaustion-Detector | 2004 |
+| Windows Update install failure | System | Microsoft-Windows-WindowsUpdateClient | 20 |
+| Driver/Device install problems | System | Microsoft-Windows-UserPnp / Kernel-PnP | verify on machine, record in VERIFIED_SOURCES |
+
+Verify each provider name and ID on a real machine; some differ between Windows versions.
+
+### 6.2 macOS and Linux collectors (Milestones 9–10)
+
+Same Snapshot schema. Suggested sources:
+
+- **macOS:** `system_profiler -json` (hardware, battery, storage), `sw_vers`, `softwareupdate -l`, `fdesetup status`, `spctl --status`, `csrutil status`, `/usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate`, `log show` (bounded queries), `/Library/Logs/DiagnosticReports` (crash file listing), LaunchAgents/LaunchDaemons folders, `/Applications` bundle versions, `smartctl` if installed.
+- **Linux:** `/etc/os-release`, `/proc/meminfo`, `/proc/pressure/memory` (PSI), `sysinfo`, `lsblk -J`, `smartctl -a -j`, `journalctl -p err --since "30 days ago" -o json` (bounded), `systemctl --failed`, `upower -d`, `dpkg-query`/`rpm -qa`, `ufw status` / `firewall-cmd --state`, `lspci -k` (driver in use).
+
+---
+
+## 7. Rules engine
+
+Rules live in `kosh-rules`. Each rule is:
+
+- **Detection logic** in Rust: a pure function `fn check(snapshot: &Snapshot) -> Vec<Finding>`. Pure means no system calls, so it is fully testable with fixture Snapshots.
+- **Text and fix content** in `rules/<rule-id>.toml`: title, summary template, fix steps, verify text, references, translations (`en`, `hi`, `hinglish`).
+
+### 7.1 Initial check catalog (version 1)
+
+Thresholds are starting values; tune them with lab and field data. Every threshold lives in a config file, not hard-coded.
+
+| ID | Check | Detection (simplified) | Severity | Fix level |
 |---|---|---|---|---|
-| **Student** (India/emerging markets) | 256–512 GB Windows laptop | Constantly full; scared to delete | Simple explanations, Hindi/Hinglish, "safe clean" button | Low price (₹99–149/mo or yearly), student discounts |
-| **Developer** | Windows/Mac, many projects | `node_modules`, Docker, Gradle, Android SDK, venvs, build caches | Dev-aware cleanup with "how to rebuild" commands | Yes, highly (time = money) |
-| **Creator / video editor** | Big drives, still full | Raw footage, render caches, project files | Find old footage, offload to cloud/external, cache cleanup | Yes |
-| **Gamer** | 1 TB+ but games are huge | Shader caches, old launchers, unused games | "Games you haven't played in 6 months", launcher-aware cleanup | Medium |
-| **Non-technical family user** | Shared laptop | Fear + confusion | Voice/plain-language assistant, "Is this safe?" | Through family plan |
-| **Small business IT** | 5–200 PCs | No visibility, manual cleanup | Fleet dashboard, policies, reports | Yes (B2B) |
+| PERF-001 | RAM regularly full | Available memory < 10% for > 50% of samples, or commit > 90% | Medium | SelfFix (close/limit apps) + Hardware advice |
+| PERF-002 | Memory-heavy app | One app group > 30% of total RAM | Low | SelfFix |
+| PERF-003 | Heavy paging | Pages/sec sustained above threshold while memory is low | Medium | SelfFix |
+| PERF-004 | Too many startup apps | > 10 enabled non-Microsoft startup items | Low | SelfFix (Settings → Apps → Startup) |
+| PERF-005 | Long uptime | Uptime > 14 days | Info | SelfFix (restart) |
+| PERF-006 | Low-memory events | Event 2004 in last 30 days | Medium | SelfFix |
+| STOR-001 | System drive almost full | C: free < 10% or < 15 GB | High | SelfFix (point to Storage settings / Kosh storage module later) |
+| STOR-002 | Windows on a hard disk (HDD) | System volume on `MediaType = HDD` | Medium | Hardware advice (SSD upgrade) |
+| DISK-001 | Disk health warning | `HealthStatus` not Healthy, or SMART failing attribute | Critical | Technician + "back up now" |
+| DISK-002 | SSD wear high | Wear ≥ 80% | High | Back up + plan replacement |
+| DISK-003 | Disk errors in logs | disk 7/153 or Ntfs 55 events | High | Back up + run `chkdsk` (copy command) + technician if repeated |
+| DEV-001 | Device not working | `ConfigManagerErrorCode` ≠ 0 and ≠ 22 | High (network, display, storage, audio) / Medium (others) | SelfFix guided per code |
+| DEV-002 | Device disabled | Code 22 | Info | SelfFix (if user wants it enabled) |
+| DEV-003 | Missing driver | Code 28 | Medium | SelfFix: Windows Update → Optional updates, or manufacturer support page |
+| DEV-004 | Very old display driver | GPU driver date > 2 years | Low | SelfFix: manufacturer site or Windows Update |
+| STAB-001 | Blue screens | ≥ 1 event 1001 bugcheck in 30 days | High (≥ 3: Critical) | Guided; include bugcheck code meaning; Technician if repeated |
+| STAB-002 | Unexpected shutdowns | Kernel-Power 41 without matching user-initiated shutdown | Medium | Guided (power, overheating, battery) |
+| STAB-003 | Hardware errors | WHEA events present | High | Technician |
+| STAB-004 | Repeated app crashes | Same app crashes ≥ 3 times | Medium | SelfFix (update/reinstall app) |
+| STAB-005 | Services failing | SCM 7000/7023/7031/7034 for the same service ≥ 3 times | Medium | Guided |
+| STAB-006 | Pending reboot | Any pending-reboot flag | Low | SelfFix (restart) |
+| SEC-001 | Antivirus off or outdated | No enabled AV, or Defender signatures > 7 days old | Critical | SelfFix (Windows Security) |
+| SEC-002 | Firewall off | Any profile disabled | High | SelfFix |
+| SEC-003 | Updates stale | No successful update in > 45 days, or update failures (event 20) | High | SelfFix (Windows Update) |
+| SEC-004 | OS out of support | OS version past support end in `os_lifecycle.toml` | Critical | Guided (upgrade path / hardware check) |
+| SEC-005 | SMBv1 enabled | Feature enabled | High | Guided (copy command, needs admin) |
+| SEC-006 | UAC disabled | `EnableLUA = 0` | High | SelfFix |
+| SEC-007 | Disk not encrypted (laptop) | Laptop and BitLocker/Device Encryption off | Medium | Guided (only where the edition supports it) |
+| SEC-008 | Secure Boot off | `UEFISecureBootEnabled = 0` | Low | Technician (BIOS setting) |
+| SEC-009 | Suspicious startup item | Unsigned startup executable in `Downloads`, `Temp` or `AppData\Local\Temp`, or a double extension like `.pdf.exe` | High | Guided: scan with Defender, then disable startup entry |
+| SEC-010 | Plain-text secret files | File *names* like `passwords.txt`, `*.pem`, `.env` on Desktop/Documents/Downloads | Medium | SelfFix (password manager) — names only in v1, no content scanning |
+| VULN-001 | App with known exploited vulnerability | Installed version matches a CISA KEV entry | Critical | SelfFix (update link) |
+| VULN-002 | App with known vulnerability | Installed version matches a CVE with CVSS ≥ 7 | High | SelfFix |
+| VULN-003 | App outdated | Newer version known, no CVE match | Low | SelfFix |
+| HW-001 | RAM upgrade recommended | PERF-001 true AND total RAM ≤ 8 GB AND free slot or higher max capacity detected | Info | Hardware advice |
+| HW-002 | Battery worn | Full charge < 60% of design capacity | Medium | Technician (battery replacement) |
+| HW-003 | SSD upgrade recommended | STOR-002 true | Info | Hardware advice |
+| NET-001 | Network adapter problem | Adapter present but `Status` error, or no adapter up | High | Guided (troubleshooter, driver reinstall steps) |
+| NET-002 | DNS or internet unreachable | Adapter up but DNS/HTTPS test fails | Medium | Guided |
 
-**Beachhead (first market):** **students + developers on Windows in India.** They have the highest pain, they're active online, they spread tools by word of mouth, and they are reachable through colleges, YouTube, Reddit, Discord, and GitHub.
+Generate `docs/CHECK_CATALOG.md` from the rule files with a small build script so documentation never drifts from code.
 
----
+### 7.2 Hardware advice rules
 
-## 6. Full Feature List
+- Advice only when the evidence supports a real benefit. Never recommend hardware "just because".
+- Always state the evidence ("RAM was above 90% for 22 of 30 samples").
+- Always add "confirm compatibility in your laptop's manual or with a technician".
+- Price ranges are optional, live in a config file, are shown in local currency, and include "approximate" with the date they were last updated.
+- No affiliate links, no specific brands in version 1.
 
-Priority labels: **P0** = MVP (must ship first), **P1** = V1 (months 3–6), **P2** = V2 (months 6–12), **P3** = Moonshot.
+### 7.3 Health score
 
-### 6.1 Core: See & Understand
-
-| # | Feature | What it does | Priority |
-|---|---|---|---|
-| F1 | **Lightning Scan** | Scans the whole drive in seconds by reading the NTFS Master File Table (the same approach WizTree uses). Falls back to normal folder walking on other file systems. | P0 |
-| F2 | **Storage Map** | Visual treemap/sunburst of what fills the drive, grouped by *meaning* (Apps, Games, Photos, Dev, System, Cache), not just folders. | P0 |
-| F3 | **"Where is it?" Locator** | Ask "Where are my WhatsApp photos?" and get a breadcrumb: `This PC › C: › Users › Shaan › Documents › WhatsApp › Media` with size and an **[Open Folder]** button. | P0 |
-| F4 | **Folder Explainer** | Click any folder and get a plain-language card: what it is, which app owns it, last used, size trend, safe or not, and how to recover it. | P0 |
-| F5 | **Chat Assistant** | Ask anything about your storage in natural language. Multilingual (English, Hindi, Hinglish, and more). | P0 |
-| F6 | **App Ownership Graph** | Links every folder to the app that created it, using install records, signatures, and process history. | P0 (basic) → P1 (deep) |
-| F7 | **Space Timeline** | "Your drive grew 22 GB this month. 15 GB came from Telegram downloads." | P1 |
-| F8 | **Space Forecast** | "At this rate your C: drive will be full in 26 days." | P1 |
-
-### 6.2 Core: Decide Safely
-
-| # | Feature | What it does | Priority |
-|---|---|---|---|
-| F9 | **Traffic-Light Safety** | 🟢 Safe (cache, temp, installers) · 🟡 Review (old/unused personal files, duplicates) · 🔴 Locked (OS, active app data). | P0 |
-| F10 | **Impact Analysis ("What breaks?")** | Before deletion: "This is used by Adobe Premiere. Deleting it breaks the app. Uninstall Premiere properly instead to free 6.1 GB." | P0 |
-| F11 | **Confidence Score** | Every suggestion shows confidence (e.g. 98% safe) plus the evidence behind it. | P0 |
-| F12 | **"Last Used" Intelligence** | Combines last-access time, last-modified time, app launch history, and recent-file lists, because Windows doesn't always update the "last opened" date. | P1 |
-| F13 | **Smart Plan** | "Find me 20 GB" → a ranked plan from safest to least safe, stopping once the goal is reached. | P0 |
-
-### 6.3 Core: Act with Permission
-
-| # | Feature | What it does | Priority |
-|---|---|---|---|
-| F14 | **Permission Gate** | Every action shows a preview list with checkboxes and a final confirm. Red items can't be selected. | P0 |
-| F15 | **Quarantine + 30-day Undo** | Removed items go to a safe holding area first. A one-click **Restore** button. (See Section 11.4 for the important "quarantine doesn't free space" problem and how to solve it.) | P0 |
-| F16 | **Action Log / Time Machine** | A full history of what was removed, when, why, and how much space it freed. | P0 |
-| F17 | **Proper Uninstall** | Uninstalls apps through their official uninstaller, then finds leftovers and asks about them. | P1 |
-| F18 | **Restore Point Before Big Actions** | Creates a Windows System Restore point before large cleanups (when enabled). | P1 |
-
-### 6.4 Specialized Cleaners (each is a reason to download)
-
-| # | Feature | What it does | Priority |
-|---|---|---|---|
-| F19 | **Developer Mode** | Finds `node_modules`, Python venvs, `__pycache__`, Gradle/Maven caches, Android SDK images, Xcode DerivedData, Rust `target/`, Docker images/volumes, old Unity/Unreal caches. Shows the **rebuild command** ("run `npm install` to restore"). Respects git: never touches uncommitted work. | P1 (big wedge, start early) |
-| F20 | **Duplicate & Similar Photo Finder** | Exact duplicates (hash) + near-duplicates (perceptual hash) + burst shots + blurry photos + old screenshots. Keeps the best one by default. | P1 |
-| F21 | **Messaging App Media** | WhatsApp, Telegram, Discord, Teams caches and downloaded media, with "forwarded memes" detection. | P1 |
-| F22 | **Game Manager** | Steam/Epic/Xbox/Riot-aware. "You haven't played GTA V in 8 months, 110 GB. Uninstall (your saves are in the cloud)?" | P1 |
-| F23 | **Downloads Doctor** | Old installers (`.exe`, `.msi`, `.zip` already extracted), duplicate downloads, half-finished downloads. | P0 |
-| F24 | **Big & Forgotten Files** | Large files not opened in 6+ months, grouped by type. | P0 |
-| F25 | **Video Shrinker** | Compresses large phone videos (H.265/AV1) with a preview of quality. Often saves 50–70%. | P2 |
-| F26 | **Windows Deep Clean (safe way)** | Uses *official* tools for system areas: DISM component cleanup for `WinSxS`, `Windows.old` removal, hibernation file explanation, Delivery Optimization cache. Never deletes system files directly. | P1 |
-
-### 6.5 Security & Health
-
-| # | Feature | What it does | Priority |
-|---|---|---|---|
-| F27 | **Security Check** | Outdated apps with known vulnerabilities, unknown startup programs, suspicious executables, secrets left in plain text. Full details in [Section 13](#13-security-scanner-vulnerability-detection). | P1 |
-| F28 | **Disk Health (SMART)** | Reads drive health and warns before the SSD/HDD fails: "Back up now." | P1 |
-| F29 | **Sensitive File Finder** | Finds scans of Aadhaar/PAN/passport, bank statements, and password files in random places, and suggests a safe location or encryption. | P2 |
-
-### 6.6 Save Money & Space Without Deleting
-
-| # | Feature | What it does | Priority |
-|---|---|---|---|
-| F30 | **"Before You Buy" Advisor** | "You need 30 GB. I can free 42 GB safely. You don't need a pen drive yet." | P0 (as a message) |
-| F31 | **Smart Offload** | Moves old files to OneDrive/Google Drive/external disk and keeps a searchable "ghost index" so you still know where everything is. | P2 |
-| F32 | **Move Apps to Another Drive** | Moves games/apps from C: to D: the proper way (through launchers). | P2 |
-| F33 | **Compress in Place** | Uses NTFS compression / CompactOS for rarely used folders, with zero data loss. | P2 |
-
-### 6.7 Automation & Habit
-
-| # | Feature | What it does | Priority |
-|---|---|---|---|
-| F34 | **Rules / Autopilot** | User-written rules in plain language: "Every week, clear installers in Downloads older than 30 days." Rules show a preview the first time and send a weekly summary. | P1 |
-| F35 | **Weekly Digest** | "This week: +4 GB. Freed 6 GB. Your drive is healthy." | P1 |
-| F36 | **Low-Space Guardian** | When space drops below a threshold, Kosh opens a ready plan instead of Windows' scary warning. | P1 |
-| F37 | **Shareable Space Report** | A beautiful card: "I freed 63 GB with Kosh 🚀". Built-in virality. | P0 |
-
-### 6.8 Multi-Device, Family & Business
-
-| # | Feature | What it does | Priority |
-|---|---|---|---|
-| F38 | **Family Dashboard** | See all family laptops in one place. Approve cleanups remotely. | P2 |
-| F39 | **Phone Companion** | Android app (photos, WhatsApp media, duplicates); iOS is limited by Apple's restrictions. | P2 |
-| F40 | **Kosh for Teams (IT)** | Fleet view, policies ("never let C: go under 15%"), remote cleanup with employee approval, reports, SSO, MDM deployment (Intune). | P2 |
-| F41 | **MSP / Reseller Portal** | IT service providers manage many companies. | P3 |
-
-### 6.9 Moonshots (the "YC-level" vision)
-
-| # | Feature | Vision | Priority |
-|---|---|---|---|
-| F42 | **Folder Knowledge Graph (public)** | The world's largest open database of "what is this folder and is it safe to delete?". It powers SEO, an API, and other products. | P2 → P3 |
-| F43 | **Kosh API / SDK** | Lets other apps (OEM tools, antivirus, backup software, IT tools) call "explain this path" and "is this safe?". | P3 |
-| F44 | **Personal File Brain** | Beyond cleanup: "Find the PDF my professor sent in March", semantic search across all files, local and private. Kosh grows from a *storage cleaner* into a *file intelligence layer for your computer*. | P3 |
-| F45 | **OEM Preinstall** | Preinstalled on budget laptops (Indian and global OEMs) as the "storage assistant". Huge distribution. | P3 |
-
-> **The big vision:** Kosh starts as the safest way to free space. It ends as **the AI that understands everything on your computer**: storage, files, security, and health.
+Start at 100, subtract per finding: Critical 25, High 12, Medium 5, Low 2, Info 0, with a floor of 0. Map to labels: 85–100 Good, 65–84 Fair, 40–64 Needs attention, < 40 Poor. Keep the formula in one place with tests, and show it in the report ("How is this score calculated?").
 
 ---
 
-## 7. User Journeys & Example Conversations
+## 8. Vulnerability pipeline (`kosh-vuln`)
 
-### 7.1 First run (target: value in under 3 minutes)
+Matching installed Windows software to vulnerabilities is the hardest and most error-prone part. **Precision beats coverage.**
 
-```
-Install (30 MB, signed) → Welcome: "I'll look at file names and sizes, never contents."
-   → Scan C: (≈10–60 sec) → Health Report:
-        "Your C: drive: 476 GB, 459 GB used (96%)
-         🟢 Safe to free now:        31.4 GB   [Review & Clean]
-         🟡 Worth reviewing:         48.2 GB   [Show me]
-         🔴 System/app (locked):    210.0 GB
-         💡 You don't need a new drive."
-   → User clicks "Review & Clean" → preview list → Confirm → "Freed 31.4 GB 🎉"
-   → [Share my Space Report]   [Ask Kosh anything]
-```
-
-### 7.2 Example conversations
-
-**"Where is it saved?"**
-> **You:** where does my minecraft save worlds
-> **Kosh:** Your Minecraft worlds are here:
-> `This PC › C: › Users › Shaan › AppData › Roaming › .minecraft › saves` (3.2 GB, 7 worlds)
-> `AppData` is a hidden folder, which is why you couldn't find it. **[Open folder]** **[Back up worlds]**
-
-**"Can I delete this?"**
-> **You:** can i delete C:\Users\Shaan\AppData\Local\Android\Sdk\system-images
-> **Kosh:** 🟡 **Review.** These are Android Emulator images (19.4 GB) used by Android Studio.
-> - Last used: **9 months ago**
-> - If deleted: the emulator won't start until you download an image again (Android Studio → SDK Manager, ~15 min).
-> - Your code and projects are **not** affected.
-> Suggestion: keep the newest image (API 34, 6.1 GB) and remove the 3 old ones to free **13.3 GB**. **[Do this]** **[Keep all]**
-
-**"What breaks?"**
-> **You:** what happens if i delete ProgramData\NVIDIA Corporation
-> **Kosh:** 🔴 **Locked.** This folder contains your NVIDIA graphics driver settings and installer data. Deleting it can break display settings and driver updates. It is only 1.2 GB.
-> If you want to save space here, I can safely clear the **NVIDIA shader cache** instead (2.8 GB; it rebuilds automatically). **[Clear shader cache]**
-
-**"Find me space"**
-> **You:** i need 25 gb for a game, dont touch my photos
-> **Kosh:** Got it, photos are protected. Here's a plan for **26.7 GB**, safest first:
-> 1. 🟢 Windows Update leftovers (official cleanup): 6.2 GB
-> 2. 🟢 Browser & app caches: 4.9 GB
-> 3. 🟢 Old installers in Downloads (37 files): 8.1 GB
-> 4. 🟡 `node_modules` in 4 projects untouched for 1 year: 7.5 GB (rebuild with `npm install`)
-> **[Review list]** **[Clean all 4]**
-
-**Hinglish**
-> **You:** bhai ye WinSxS folder itna bada kyu hai, delete kar du?
-> **Kosh:** Nahi, isko manually delete mat karo. 🔴 Ye Windows ka core folder hai. Lekin main Windows ka official cleanup tool chala sakta hoon jo safely ~4–6 GB free karta hai. **[Safe cleanup chalao]**
-
-**Security**
-> **You:** is my laptop safe?
-> **Kosh:** Mostly yes. 3 things to look at:
-> 1. **WinRAR 6.x** is outdated and has a known security flaw. **[Update]**
-> 2. An unknown program `svchelper.exe` starts with Windows from your Downloads folder. That's unusual. **[Details]** **[Disable startup]**
-> 3. `passwords.txt` on your Desktop contains what look like passwords. **[Move to a password manager guide]**
-
-### 7.3 Key screens
-
-1. **Home / Health:** drive rings, the "safe to free" number, a big friendly button.
-2. **Map:** treemap grouped by meaning; click to drill down.
-3. **Chat:** a side panel available on every screen.
-4. **Review & Clean:** checklist grouped by category, with the evidence for each item.
-5. **Undo Center:** quarantine items with a countdown and a restore button.
-6. **Security:** short, prioritized list.
-7. **Rules:** plain-language automations.
-8. **Settings → Privacy:** a clear toggle for local-only AI vs. cloud AI.
+1. **Inventory:** from the software collector (name, publisher, version).
+2. **Normalize:** map registry display names to a canonical product using a curated table `data/product_map.toml` (e.g. `"7-Zip 23.01 (x64)"` → vendor `7-zip`, product `7-zip`, version `23.01`). Start with the 50 most common Windows apps (archive tools, browsers, PDF readers, media players, chat apps, remote-desktop tools, runtimes like Java/Python/Node, Git, Notepad++, Zoom, OBS). Unknown apps are skipped, not guessed.
+3. **Vulnerability data:** a separate updater command `kosh vuln update` downloads and caches into local SQLite:
+   - NVD CVE API 2.0 (`https://services.nvd.nist.gov/rest/json/cves/2.0`), queried per product CPE. Respect rate limits; support an optional NVD API key from the `NVD_API_KEY` environment variable.
+   - CISA Known Exploited Vulnerabilities catalog (JSON feed published by CISA).
+   - Optional: EPSS scores from FIRST (`https://api.first.org/data/v1/epss`) for prioritization.
+4. **Match:** compare installed version against CPE version ranges (`versionStartIncluding`, `versionEndExcluding`, etc.). Write thorough version-comparison tests (e.g. `19.00` vs `19.0`, `1.10` vs `1.9`, builds with four parts).
+5. **Report:** say "known vulnerable" only on a confirmed range match. Say "outdated" when only a newer version is known. Never print a CVE that was not matched by range.
+6. **Offline:** if the cache is missing or older than 14 days, the report says so and skips VULN checks rather than guessing.
 
 ---
 
-## 8. System Architecture
+## 9. AI layer (`kosh-ai`) — optional
 
-### 8.1 Big picture
+The report must be complete without AI. AI adds: plain-language narration, Hindi/Hinglish output, prioritization advice, and a chat that answers questions **about the findings**.
 
-```mermaid
-flowchart TB
-    subgraph Device["User's Computer (local)"]
-        UI["Desktop UI<br/>(Tauri + React)"]
-        Agent["AI Agent Orchestrator"]
-        LLM_L["Local LLM<br/>(llama.cpp / ONNX)"]
-        Scanner["Scanner Engine (Rust)<br/>MFT reader + USN journal watcher"]
-        Index[("Local Index<br/>SQLite + FTS5")]
-        KB[("Folder Knowledge Base<br/>signatures, synced")]
-        Rules["Safety Rules Engine<br/>(deterministic)"]
-        Exec["Action Executor<br/>(privileged Windows service)"]
-        Q[("Quarantine Store<br/>+ Action Log")]
-        Sec["Security Scanner"]
-    end
+### 9.1 Input and output
 
-    subgraph Cloud["Kosh Cloud"]
-        GW["LLM Gateway<br/>(anonymize, rate-limit, route)"]
-        LLM_C["Cloud LLM providers"]
-        KBS[("Knowledge Graph Service<br/>Postgres")]
-        Vuln["Vulnerability Feed<br/>(NVD/CVE + app versions)"]
-        Acct["Accounts, Billing,<br/>Team Dashboard"]
-        Tel["Opt-in Analytics"]
-    end
+- **Input:** the Findings list (JSON) plus a minimal, anonymized Snapshot summary (OS, hardware class, RAM size, disk type). Replace the Windows username and any personal folder names with `<user>`. Never send installed app lists or file names without opt-in.
+- **Output:** JSON with `overview` (≤ 120 words), `top_actions` (≤ 5 items, each referencing a finding `id`), and `per_finding` explanations keyed by `id`.
 
-    UI <--> Agent
-    Agent <--> LLM_L
-    Agent <--> GW --> LLM_C
-    Agent --> Index
-    Agent --> KB
-    Agent -->|"proposes plan"| Rules
-    Rules -->|"validated plan"| UI
-    UI -->|"user approves"| Exec
-    Exec --> Q
-    Scanner --> Index
-    KB <-->|sync| KBS
-    Sec <--> Vuln
-    UI <--> Acct
-```
+### 9.2 Guardrails (enforced in code, not only in the prompt)
 
-### 8.2 The most important design decision
+- Parse the AI output as JSON. Reject and fall back to templates if it references an unknown finding ID, or contains numbers, versions or paths that do not appear in the input.
+- The AI cannot create findings, change severity, or add actions.
+- Timeout 30 s; on failure, use the template report silently.
 
-> **The AI never holds the delete button.**
+### 9.3 System prompt (starting point)
 
 ```
- AI (LLM)  ──proposes──▶  Safety Rules Engine  ──filters──▶  User sees preview  ──approves──▶  Executor
- (can be wrong)          (deterministic code,              (checkboxes,                  (only accepts
-                          blocks red items,                 evidence)                     signed, approved
-                          checks open files,                                              plans)
-                          checks git status)
+You are Kosh, a calm and honest PC health assistant. You receive a JSON list of findings
+produced by deterministic checks. Explain them to a non-technical person.
+Rules:
+- Use ONLY facts present in the input. Never add new problems, numbers, versions, or paths.
+- Refer to findings by their id.
+- Be calm. No fear words. If there are no serious findings, say the computer is in good shape.
+- For each finding say: what it means, why it matters, who can fix it, and the first step.
+- Respond in the requested language: en, hi, or hinglish.
+- Output valid JSON matching the schema provided. No other text.
 ```
 
-- The LLM is great at *explaining* and *planning*, but it can hallucinate. So it is only an advisor.
-- A **deterministic rules engine** (normal code, fully tested) decides what is even *allowed*.
-- The **executor** is a separate process that only runs plans the user approved in the UI. It refuses anything on the protected list, no matter what.
+### 9.4 Provider configuration
 
-### 8.3 Components in detail
-
-| Component | Job | Key details |
-|---|---|---|
-| **Scanner Engine** | Build a full picture of the disk, fast | Rust. Reads the NTFS **Master File Table (MFT)** directly when run elevated (whole-disk scan in seconds). Fallback: parallel directory walk (`FindFirstFileEx`). Records path, size, *allocated* size, timestamps, attributes, hard links, reparse points (avoid double-counting OneDrive placeholders and symlinks). |
-| **Change Watcher** | Keep the index fresh without rescanning | Reads the **NTFS USN Change Journal** to track new/changed/deleted files incrementally. Powers the timeline and the forecast. |
-| **Local Index** | Searchable database of every file/folder | SQLite with FTS5 full-text search on names/paths; aggregated folder sizes; per-category totals. Stays on the device. |
-| **Folder Knowledge Base** | "What is this folder?" | Signature rules (path patterns → app, category, safety, rebuild method). Thousands of entries, synced from the cloud and versioned. See [Appendix 28.1](#281-folder-signature-schema). |
-| **Ownership Resolver** | Map folders to apps | Windows Uninstall registry keys, AppX/MSIX packages, Start Menu shortcuts, launcher manifests (Steam `appmanifest`, Epic manifests), running processes, Prefetch data (where permitted). |
-| **Usage Signals** | "Is this actually used?" | Last access/modify times, app launch history, recent documents, git activity in dev folders, game launcher "last played" data. |
-| **Safety Rules Engine** | Final say on what's allowed | Protected paths, open-file check (Restart Manager API), git dirty-state check, cloud-sync state check (don't delete the only copy), size/age sanity checks. |
-| **AI Agent Orchestrator** | Runs conversations | Tool-calling loop; chooses local vs. cloud model; builds small, anonymized context from the index. |
-| **Action Executor** | Performs changes | Separate Windows service with least privilege. Executes only signed, user-approved plans. Moves to quarantine/Recycle Bin, calls official uninstallers, runs DISM cleanup, writes the log. |
-| **Quarantine & Log** | Undo for everything | Item manifest (original path, ACLs, timestamps, hash), restore, auto-purge after N days, export log. |
-| **Security Scanner** | Vulnerabilities & risks | Installed app versions vs. CVE feed, startup items, unsigned/suspicious executables, secret patterns. |
-| **Cloud: LLM Gateway** | Safe cloud AI calls | Strips usernames/personal names from paths, enforces quotas, routes to the cheapest model that works, caches common answers. |
-| **Cloud: Knowledge Graph Service** | Learn across users | Receives *anonymous, opt-in* signals ("unknown folder pattern X, ~2 GB, owned by app Y"). Humans + AI review them into new signatures. |
-
-### 8.4 Data flow for one question
-
-```
-User: "Can I delete C:\Users\Shaan\AppData\Local\JetBrains?"
- 1. Agent → Index: get size, children, timestamps          → 7.8 GB, last modified 14 months ago
- 2. Agent → KB: match signatures                           → "JetBrains IDE caches & logs", rebuildable
- 3. Agent → Ownership: is a JetBrains IDE installed?       → PyCharm 2023.1 installed, last launched 14 months ago
- 4. Agent → Rules: allowed actions?                        → caches: 🟢, settings subfolder: 🟡
- 5. Agent → LLM: compose explanation using ONLY these facts
- 6. UI shows answer + evidence + [Clear caches (6.9 GB)] [Uninstall PyCharm]
-```
-
-The LLM writes the *words*. The *facts* come from the scanner, the KB, and the rules engine. This is how hallucination is kept under control.
+- Provider: Anthropic Claude API via the Messages endpoint. Model ID read from the `KOSH_AI_MODEL` environment variable with a sensible default (the owner can check current model IDs at https://docs.claude.com). API key from `ANTHROPIC_API_KEY`.
+- For development, the owner's own API key is fine. **Before public release**, never ship an API key inside the app: route calls through a small backend proxy (Milestone 11) that holds the key, rate-limits, and strips personal data again.
+- Design an `AiProvider` trait so a local model (llama.cpp/Ollama) can be added later for offline/private mode.
 
 ---
 
-## 9. Technology Stack (and Why)
+## 10. CLI specification (`kosh`)
 
-### 9.1 Desktop app
-
-| Layer | Choice | Why | Alternatives |
-|---|---|---|---|
-| Core engine | **Rust** | Speed (scanning millions of files), memory safety (important for a privileged tool), great Windows API crates (`windows-rs`) | C++ (fast, less safe), C# (.NET; easy Windows integration, larger runtime) |
-| App shell | **Tauri 2** | Small installers (~10–30 MB vs. 100+ MB with Electron), Rust backend built in, cross-platform later | Electron (bigger, easier for web devs), WinUI 3 (native, Windows-only) |
-| UI | **React + TypeScript + Tailwind** | Fast to build, huge ecosystem, easy hiring | Svelte, Solid |
-| Charts / treemap | **D3 / ECharts** | Treemaps and sunbursts out of the box | Recharts |
-| Local DB | **SQLite (+ FTS5)** | Embedded, fast, reliable, zero setup | DuckDB (great for analytics queries) |
-| Local AI runtime | **llama.cpp** (via Rust bindings) or **ONNX Runtime** with DirectML for GPU/NPU | Runs small models offline on normal laptops | Ollama (good for prototyping), Windows AI APIs on Copilot+ PCs |
-| Local model | Small instruct model (~1–4B parameters, quantized), e.g. from the Qwen / Llama / Gemma / Phi families | Good enough for explanations and tool calling when grounded with facts | Evaluate every quarter; small models improve fast |
-| Privileged helper | Windows Service (Rust) + named pipes with ACLs | Least privilege; UI runs as a normal user | Scheduled task with elevation |
-| Updates | Tauri updater, signed releases | Secure auto-update | Microsoft Store auto-update |
-| Installer | MSI/MSIX, signed with an **EV code-signing certificate** | Avoids SmartScreen "unknown publisher" warnings, which kill conversion | — |
-| Distribution | Website, **Microsoft Store**, **winget**, Chocolatey | Trust + discoverability | — |
-
-### 9.2 Cloud backend
-
-| Layer | Choice | Why |
-|---|---|---|
-| API | **TypeScript (Node/Bun + Hono/Fastify)** or **Python (FastAPI)** | Pick what the team knows. FastAPI is great if you'll do lots of ML work. |
-| Database | **Postgres** (Supabase or Neon to start) | Accounts, knowledge graph, team data |
-| Auth | Supabase Auth / Clerk; SSO (SAML/OIDC) for Teams later | Fast to ship |
-| Payments | **Stripe** (global) + **Razorpay** (India: UPI, cards, subscriptions) | UPI matters a lot in India |
-| LLM providers | A frontier API (e.g. Anthropic Claude) for hard questions + a cheap fast model for routine ones, behind your own gateway | Quality where needed, low cost elsewhere; no vendor lock-in |
-| Hosting | Cloudflare Workers / Fly.io / Railway at first; AWS/GCP when scaling | Cheap, simple early |
-| Analytics | **PostHog** (self-hostable, privacy-friendly), opt-in only | Product analytics without creepiness |
-| Crash reports | **Sentry** (with path scrubbing) | Fix bugs fast |
-| Vulnerability data | **NVD/CVE feeds**, vendor advisories, **winget** manifests for latest versions | Security Check feature |
-| Marketing site | Next.js / Astro on Vercel/Cloudflare | Programmatic SEO pages (see Growth) |
-
-### 9.3 Later platforms
-
-| Platform | Notes |
+| Command | What it does |
 |---|---|
-| **macOS** | Swift helper for Full Disk Access; APFS snapshots and "purgeable space" make it a different problem; strong willingness to pay (CleanMyMac proves it). |
-| **Android** | Storage Access Framework / MediaStore; good for photos & WhatsApp media. |
-| **iOS** | Very limited (Photos library only). Low priority. |
-| **Linux** | Developer audience; simple to port the Rust core; CLI first. |
+| `kosh scan` | Full scan; prints a short terminal summary; saves Snapshot + Findings to the history folder. |
+| `kosh scan --json` | Prints Findings as JSON (for scripts and IT tools). |
+| `kosh report [--html PATH] [--lang en\|hi\|hinglish] [--ai]` | Builds a report from the latest scan. HTML is one self-contained file. `--ai` adds narration if configured. |
+| `kosh doctor <topic>` | Focused scan and guidance. Topics: `wifi`, `sound`, `display`, `slow`, `boot`, `battery`, `disk`, `updates`, `security`. |
+| `kosh memory` | Live view of memory use grouped by app for 30 s. |
+| `kosh monitor --hours N` | Samples performance in the background (low overhead) to support PERF and HW rules with real history. |
+| `kosh vuln update` | Refreshes the local vulnerability cache. |
+| `kosh history` | Lists previous scans and score changes. |
+| `kosh verify <finding-id>` | Re-runs only the collectors and rule needed for that finding and says whether it is fixed. |
+| `kosh snapshot export --anonymize PATH` | Exports an anonymized Snapshot for support or test fixtures. |
+
+Global flags: `--offline`, `--verbose`, `--no-color`. Exit codes: `0` no High/Critical findings, `1` High/Critical present, `2` scan error.
+
+Storage location for history and cache: `%LOCALAPPDATA%\Kosh` on Windows, platform equivalents elsewhere (use the `directories` crate).
 
 ---
 
-## 10. How the AI Works
+## 11. Report specification
 
-### 10.1 Classification: four layers, cheapest first
+**Terminal summary:** score and label, then findings grouped as "Fix now" (Critical/High), "Worth doing" (Medium/Low), "Healthy" (one line per area with no findings), then "Skipped checks" with reasons.
 
-Most files never need an LLM. That keeps it fast, cheap, and accurate.
+**HTML report sections:**
 
-| Layer | Method | Handles | Cost |
-|---|---|---|---|
-| 1 | **Hard rules** (protected paths, file types) | Windows system folders, Program Files, the pagefile | Free, instant |
-| 2 | **Signature Knowledge Base** (path patterns → known app/category) | ~80–90% of disk space on a typical PC (browser caches, app data, launchers, dev tools) | Free, instant |
-| 3 | **ML classifier** (small model on metadata features: path tokens, extension mix, size, age, owner) | Unknown folders that look like known types | Very cheap, local |
-| 4 | **LLM reasoning** | Truly unknown cases + all natural-language explanation and Q&A | Local (free) or cloud (paid tier) |
+1. Header: device model, OS, scan date, score with the explanation link.
+2. Fix now / Worth doing / Healthy (cards with evidence, fix steps, who can fix it, verify step).
+3. Hardware overview (CPU, RAM sticks and slots, disks with type and health, battery).
+4. Security overview.
+5. Software with known vulnerabilities.
+6. Skipped checks and collector errors (honesty section).
+7. Footer: "Kosh did not change anything on your computer."
 
-### 10.2 Agent tools (what the AI can call)
-
-The LLM gets a small set of **read-only** tools plus one **propose** tool. It has **no** tool that deletes.
-
-```text
-search_index(query, filters)        → find files/folders by name, type, size, age
-get_folder_summary(path)            → size, children breakdown, timestamps, owner, signature match
-locate(description)                 → resolve "my WhatsApp photos" to candidate paths
-get_app_info(app_name)              → install path, data folders, last launched, size
-get_usage_signals(path)             → last opened/modified, launches, git status
-check_safety(path)                  → rules-engine verdict (green/yellow/red + reasons)
-get_security_findings()             → current security scan results
-propose_plan(items[], goal, notes)  → sends a plan to the Rules Engine → UI preview (user must approve)
-```
-
-### 10.3 Grounding rules (anti-hallucination)
-
-1. **Facts only from tools.** The system prompt requires every number, path, and app name in an answer to come from a tool result.
-2. **Cite evidence.** Each recommendation shows the evidence chips: `Owner: Android Studio` · `Last used: 9 mo` · `Rebuildable: yes`.
-3. **Unknown means unknown.** If the signature/ownership is unclear, the AI must say "I'm not sure. Treating it as 🟡 Review" and never guess "safe".
-4. **Safety comes from the rules engine, not the model.** Even if the model says "safe", a red verdict from the rules engine wins.
-5. **Evaluation set.** Keep a test suite of 1,000+ real (anonymized) folder cases with correct answers. Run it on every model/prompt change. Track the *false-safe rate* (calling something safe that isn't); the target is close to 0.
-
-### 10.4 Keeping context small (and cheap)
-
-A drive has millions of files, so you can't send them all to an AI. Instead:
-
-- Send **aggregates**: top folders, category totals, signature matches.
-- Send **only the subtree** relevant to the question.
-- **Anonymize** paths before cloud calls: `C:\Users\Shaan\…` → `C:\Users\<user>\…`, and file names inside personal folders → type + size only (unless the user opts in).
-- **Cache** answers for common signatures ("What is `AppData\Local\Temp`?") so the LLM isn't called at all.
-
-### 10.5 Local vs. cloud model routing
-
-| Situation | Model |
-|---|---|
-| Free tier, privacy mode, offline | Local small model |
-| Simple explanation of a known signature | Template + local model (or no model at all) |
-| Complex multi-step planning, rare folders, multilingual nuance | Cloud model (Pro), anonymized |
-| Enterprise with "no cloud" policy | Local only, or customer's own LLM endpoint |
+Must look good on light and dark themes, print cleanly to PDF from the browser, and work with no internet.
 
 ---
 
-## 11. Safety System: "Never Delete the Wrong Thing"
+## 12. Privacy and security of Kosh itself
 
-This is the product. If Kosh ever deletes something important, trust is gone. Safety gets the most engineering time.
-
-### 11.1 Protection layers
-
-1. **Locked zones (never touchable):** `C:\Windows` (except through official tools), `Program Files` (only through uninstallers), `ProgramData` of installed apps, boot files, the pagefile/hiberfil (explained; changed only through official settings), driver stores, anything with the System attribute, other users' profiles.
-2. **Personal files default to 🟡:** Documents, Desktop, Pictures, Videos, and Music are never 🟢 automatically. The user must review them.
-3. **The only copy?** If a file is the only copy (not synced to the cloud, no duplicate), show a strong warning.
-4. **In use?** Use the Windows **Restart Manager API** to check whether any process is using the file; if so, skip it.
-5. **Git-aware:** In code folders, never remove anything with uncommitted changes or unpushed commits; only remove *regenerable* folders (`node_modules`, `target`, `build`, `.venv`).
-6. **Cloud-sync-aware:** Understand OneDrive/Google Drive placeholders. Deleting a synced file locally can delete it in the cloud too, so warn clearly.
-7. **Dry run by default:** Every plan is a preview first.
-8. **Rate limits on big actions:** Anything over e.g. 50 GB or 10,000 files requires a second confirmation.
-9. **Restore point before deep system cleanups** (when System Protection is on).
-
-### 11.2 The safety verdict formula (simplified)
-
-```
-verdict = RED     if protected_path OR in_use OR (system_attr) OR app_critical_data
-        = YELLOW  if personal_file OR unknown_owner OR only_copy OR confidence < 0.9
-        = GREEN   if signature.rebuildable AND confidence ≥ 0.9 AND not in_use
-```
-
-### 11.3 Undo design
-
-| Action | Undo method |
-|---|---|
-| Delete cache/temp | Recycle Bin or quarantine (restorable for 30 days) |
-| Delete personal files | Quarantine with full metadata (ACLs, timestamps) |
-| Uninstall app | Can't "undo" an uninstall, so show a reinstall link and back up settings before uninstalling |
-| System cleanup (DISM) | Restore point + clear warning that it's permanent |
-| Offload to cloud/external | Ghost index + one-click "bring back" |
-
-### 11.4 ⚠️ The hidden problem: quarantine doesn't free space
-
-If you "move" files to a quarantine folder on the **same drive**, no space is freed, and the user is still out of space. Here's how to handle it, by category:
-
-| Category | Strategy |
-|---|---|
-| 🟢 Rebuildable caches/temp | Delete permanently (or Recycle Bin with auto-empty). Nothing is lost, because they regenerate. Undo = "it will rebuild automatically". |
-| 🟢 Old installers | Delete, but remember the download URL/name so the user can re-download. |
-| 🟡 Personal files | **Option A:** compressed quarantine (zstd), which saves 20–60% for documents but very little for photos/videos. **Option B:** quarantine to another drive / external disk / the user's cloud. **Option C:** Recycle Bin with a clear "Restore within N days" label. The user picks. |
-| 🟡 Large videos/photos | Offer **offload** or **compress** instead of delete. |
-
-Be honest in the UI: "This frees space now. You can restore it for 30 days from Google Drive."
-
-### 11.5 Liability
-
-- Clear Terms of Service and an in-app explanation of what Kosh does and doesn't do.
-- Consider professional liability insurance once paying users scale.
-- The action log protects both the user and the company ("here's exactly what was approved and when").
+- Runs as a normal user; the user may re-run elevated for the extra checks. Never auto-elevate repeatedly.
+- No telemetry by default. If added later: opt-in, documented field by field in `docs/PRIVACY.md`.
+- Anonymize before any export or network call: username, computer name, personal folder names, Wi-Fi network names, IP/MAC addresses.
+- No file content reading in v1 (SEC-010 uses file names only).
+- Dependencies: pin versions, run `cargo audit` in CI, avoid unmaintained crates.
+- Release binaries must be code-signed (owner provides the certificate, Milestone 11).
 
 ---
 
-## 12. Privacy & Product Security
+## 13. Testing and validation
 
-A tool that sees your whole disk *must* be safer than the things it protects you from.
+### 13.1 Unit and fixture tests
 
-### 12.1 Privacy promises (publish these on the website)
+- Every rule has tests with hand-written Snapshot fixtures: one that triggers it, one that does not, and one edge case.
+- `tests/fixtures/*.json`: anonymized real Snapshots with an `expected_findings` list. A test runs the rules on each and compares (use `insta`).
+- Version comparison and CPE matching get their own large test tables.
 
-1. **We never read or upload your file contents.** Only metadata (names, sizes, dates) is used, and it stays on your device by default.
-2. **Cloud AI is optional** and receives anonymized paths only.
-3. **No selling data. No ads. Ever.**
-4. **Telemetry is opt-in** and documented field by field.
-5. **One-click "delete my data"** for any account data.
+### 13.2 Fault-injection lab (`tests/lab/`)
 
-### 12.2 Compliance
+Use Hyper-V or VirtualBox Windows VMs with a clean saved snapshot. Each lab case is a script that plants one problem, followed by an expected finding ID. Run `kosh scan --json`, compare, restore the VM. Starting cases:
 
-| Region | Law | What it means |
+| Lab case | How to plant it | Expected |
 |---|---|---|
-| India | **Digital Personal Data Protection (DPDP) Act, 2023** (and its Rules) | Consent, purpose limitation, data-principal rights, breach notification |
-| EU/UK | **GDPR / UK GDPR** | Lawful basis, data minimization, DPA with processors, right to erasure |
-| US | State privacy laws (e.g. California CCPA/CPRA) | Notice, opt-out, deletion |
-| B2B | **SOC 2 Type II** (when selling to companies), ISO 27001 later | Required by many IT buyers |
+| Disabled device | Disable the network adapter in Device Manager | DEV-002 |
+| Firewall off | Turn off the firewall for the private profile | SEC-002 |
+| SMBv1 on | Enable the SMB1Protocol optional feature | SEC-005 |
+| Vulnerable app | Install an old 7-Zip or Notepad++ version known in NVD | VULN-002 (or VULN-001 if in KEV) |
+| Startup in Downloads | Add an unsigned test exe to the Run key from Downloads | SEC-009 |
+| Disk nearly full | Create a large file until C: free < 10% | STOR-001 |
+| Memory pressure | Run a memory-hog test program during the scan | PERF-001 |
+| App crash | Run a test program that crashes 3 times | STAB-004 |
+| Pending reboot | Install an update without restarting, or set a test registry flag | STAB-006 |
+| UAC off | Set `EnableLUA = 0` (lab only) | SEC-006 |
+| Clean machine | Nothing planted | No High/Critical findings |
 
-### 12.3 Securing Kosh itself (it runs with high privileges)
+Track **recall** (planted problems found) and **false positives** (findings on the clean machine). Targets for v1 release: recall ≥ 90% on lab cases, zero High/Critical false positives on the clean VM and on 20 real volunteer machines as judged by a technician.
 
-- **Least privilege:** The UI runs as a normal user. Only the small executor service is elevated, and it accepts only signed plans over an ACL-protected named pipe.
-- **Code signing:** EV certificate for all binaries; signed auto-updates with pinned keys.
-- **Memory-safe language** (Rust) for the privileged parts.
-- **Supply-chain security:** dependency pinning, `cargo audit`/`npm audit`, reproducible builds, SBOM, 2FA everywhere, protected release pipeline. (The cleaner category has suffered a real supply-chain attack before. Learn from it.)
-- **Bug bounty** once you have users (start on a platform like HackerOne/Bugcrowd, or self-hosted).
-- **External pentest** before the Teams launch.
-- **Antivirus false positives:** Disk tools that delete files and read the MFT often get flagged. Submit builds to Microsoft Defender and the major AV vendors for whitelisting before every release.
+### 13.3 Comparison with reference tools
+
+On at least 5 real machines, compare: startup items vs Sysinternals Autoruns, disk health vs CrystalDiskInfo or `smartctl`, device problems vs Device Manager, AV/firewall vs Windows Security. Record differences and explanations in `docs/VALIDATION.md`.
+
+### 13.4 Fix verification
+
+After a user follows a fix, `kosh verify <id>` must show the problem gone. Field metric: share of SelfFix findings verified fixed within 7 days.
 
 ---
 
-## 13. Security Scanner (Vulnerability Detection)
+## 14. Performance budgets
 
-Turning "cleanup" into "PC health" increases value and willingness to pay. Keep it **honest and calm**, not scareware.
+- Full scan (non-elevated) under 60 s on a 4-core laptop with an SSD; under 120 s on HDD machines.
+- CPU use during scan below 50% average; memory below 300 MB.
+- `kosh monitor` overhead below 1% CPU and 50 MB RAM.
 
-### 13.1 What it checks
+---
 
-| Check | How | Example output |
+## 15. Coding conventions
+
+- No `unwrap()`/`expect()` in non-test code; use `anyhow` in binaries and `thiserror` in libraries.
+- All user-facing text comes from `rules/*.toml` or report templates, never scattered string literals, so translation works.
+- Log with `tracing`; logs must not contain usernames or file contents.
+- Windows-specific code behind `#[cfg(windows)]`; the workspace must still compile on macOS/Linux with stub collectors.
+
+---
+
+## 16. Milestones (build in this order)
+
+Each milestone ends with: tests green, `CHANGELOG.md` updated, a short note to the owner explaining what now works and how to try it.
+
+| # | Milestone | Acceptance checks |
 |---|---|---|
-| **Outdated apps with known vulnerabilities** | Read installed versions (registry/AppX/winget) → compare to the latest versions and the CVE database (NVD) | "7-Zip 19.00 has a known flaw that lets a malicious archive run code. Update to the latest version. **[Update]**" |
-| **Windows update status** | Windows Update API | "Your last security update was 3 months ago." |
-| **Startup programs** | Run keys, Startup folder, scheduled tasks, services (similar to what Sysinternals Autoruns shows) | "Unknown, unsigned program starting from Downloads." |
-| **Suspicious executables** | Unsigned `.exe` in odd locations, double extensions (`invoice.pdf.exe`), recently dropped files; optional hash lookup against threat-intel services (only with explicit consent) | "This file pretends to be a PDF but is a program." |
-| **Antivirus status** | Windows Security Center API | "Microsoft Defender is on and up to date ✅" |
-| **Plain-text secrets** | Local regex/entropy scan of `.txt`, `.env`, `.json` and similar for passwords, API keys, private keys (content scanned **locally only**, never uploaded) | "`aws_keys.txt` on your Desktop contains what looks like a cloud access key." |
-| **Sensitive documents in risky places** | Name/type patterns (Aadhaar/PAN/passport scans) in Downloads/Desktop/public shares | "3 ID document scans are in Downloads. Move them to a secure folder?" |
-| **Browser extension check** (P2) | List extensions and flag removed/malicious ones from known lists | — |
-| **Disk health** | SMART data | "Your SSD health is 71%. Back up important files." |
+| **M0** | Workspace setup: crates, CI (GitHub Actions on Windows + Linux), formatting, linting, `kosh --version` | `cargo test` passes on CI; owner can run `kosh --version`. |
+| **M1** | Core types + collectors: OS, system, CPU, RAM, disks, volumes, battery, processes. `kosh scan --json` prints a Snapshot | Snapshot validates against schema; values match Task Manager / Settings on the owner's PC (owner confirms). |
+| **M2** | Rules engine + first 10 rules (PERF, STOR, HW-001/002/003, STAB-006) + terminal report + health score | Fixture tests for each rule; terminal output reviewed by owner. |
+| **M3** | Devices, drivers, event logs, reliability, crash dumps + DEV and STAB rules | Lab cases: disabled device, app crash, pending reboot pass. |
+| **M4** | Security collectors + SEC rules + OS lifecycle data | Lab cases: firewall off, SMBv1, UAC, startup in Downloads pass. Matches Windows Security app. |
+| **M5** | Vulnerability pipeline: product map (top 50 apps), NVD + KEV cache, version matching, VULN rules | Vulnerable-app lab case passes; zero false matches on the clean VM. |
+| **M6** | HTML report, history, `kosh verify`, `kosh doctor` topics, anonymized export | HTML opens offline, prints to PDF, works in dark mode; verify detects fixed vs not fixed. |
+| **M7** | `kosh monitor` + history-based PERF/HW rules | 24 h run within overhead budget; RAM advice uses history when available. |
+| **M8** | AI narration (en/hi/hinglish) with guardrails + Tauri desktop app (Scan button, report view, chat about findings) | Guardrail tests reject hallucinated IDs/numbers; app works fully with AI turned off. |
+| **M9** | macOS collectors | Same Snapshot schema; rules that apply produce correct findings on a real Mac. |
+| **M10** | Linux collectors | Same, on Ubuntu. |
+| **M11** | Release: code signing, installer (MSI/MSIX), auto-update, AI backend proxy, privacy policy page, winget manifest | Signed installer installs on a clean Windows VM without "unknown publisher" warning; no API key inside the binary. |
+| **M12** | Field validation: 20 volunteer machines + technician review, metrics in `docs/VALIDATION.md` | Targets in Section 13.2 met, or gaps documented with a plan. |
 
-### 13.2 Rules for the security feature
-
-- **Never claim to be an antivirus.** Kosh *complements* Defender; it doesn't replace it.
-- **Every warning has a "why" and a fix.**
-- **No fake counts.** If everything is fine, say "All good ✅".
+**Later (not in this repo's v1):** one-click fixes with restore points and per-action confirmation; Kosh storage cleanup module; family/IT fleet dashboard; Android companion.
 
 ---
+
+## 17. Definition of done for version 1
+
+- A non-technical user can run one command or click one button and receive an honest report within 2 minutes.
+- Every finding shows evidence, a fix, who can fix it, and how to verify.
+- Nothing on the computer was changed by Kosh.
+- Lab recall ≥ 90%, zero serious false positives in field validation.
+- Works offline; AI and online data only improve it.
