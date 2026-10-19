@@ -1,4 +1,4 @@
-# Kosh Doctor — Build Specification
+# Kosh Doctor  Build Specification
 
 > **Read this whole file before writing any code.**
 > This README is written for an AI coding agent (Claude Code) and for the human owner.
