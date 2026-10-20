@@ -1,0 +1,54 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/kosh-core",
+    "crates/kosh-collectors",
+    "crates/kosh-rules",
+    "crates/kosh-vuln",
+    "crates/kosh-report",
+    "crates/kosh-ai",
+    "crates/kosh-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "UNLICENSED"
+publish = false
+repository = "https://github.com/MORYASSHAN/kosh.ai"
+
+[workspace.dependencies]
+kosh-core = { path = "crates/kosh-core" }
+kosh-collectors = { path = "crates/kosh-collectors" }
+kosh-rules = { path = "crates/kosh-rules" }
+kosh-vuln = { path = "crates/kosh-vuln" }
+kosh-report = { path = "crates/kosh-report" }
+kosh-ai = { path = "crates/kosh-ai" }
+
+anyhow = "1"
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+clap = { version = "4", features = ["derive"] }
+sysinfo = "0.35"
+regex = "1"
+directories = "6"
+rusqlite = { version = "0.37", features = ["bundled"] }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+minijinja = "2"
+insta = { version = "1", features = ["json"] }
+roxmltree = "0.20"
+
+[profile.release]
+lto = "thin"
+codegen-units = 4
+strip = true
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"

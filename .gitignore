@@ -1,0 +1,8 @@
+/target
+**/node_modules
+/app/dist
+/app/src-tauri/target
+*.pdb
+.env
+.env.*
+!.env.example

@@ -1,0 +1,12 @@
+[package]
+name = "kosh-vuln"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+kosh-core.workspace = true
+
+[lints]
+workspace = true
